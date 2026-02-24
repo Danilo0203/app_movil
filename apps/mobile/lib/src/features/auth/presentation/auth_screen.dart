@@ -4,12 +4,10 @@ class AuthScreen extends StatefulWidget {
   const AuthScreen({
     super.key,
     required this.baseUrl,
-    required this.onBaseUrlChanged,
     required this.onAuthenticated,
   });
 
   final String baseUrl;
-  final Future<void> Function(String baseUrl) onBaseUrlChanged;
   final Future<void> Function(AuthSession session) onAuthenticated;
 
   @override
@@ -22,9 +20,6 @@ class _AuthScreenState extends State<AuthScreen> {
   final _emailCtrl = TextEditingController(text: 'demo@example.com');
   final _passwordCtrl = TextEditingController(text: 'demo1234');
   final _confirmPasswordCtrl = TextEditingController();
-  late final TextEditingController _baseCtrl = TextEditingController(
-    text: widget.baseUrl,
-  );
   bool _registerMode = false;
   bool _loading = false;
   bool _showPassword = false;
@@ -38,71 +33,7 @@ class _AuthScreenState extends State<AuthScreen> {
     _emailCtrl.dispose();
     _passwordCtrl.dispose();
     _confirmPasswordCtrl.dispose();
-    _baseCtrl.dispose();
     super.dispose();
-  }
-
-  Future<void> _openServerSettings() async {
-    final tempCtrl = TextEditingController(text: _baseCtrl.text);
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) {
-        return Padding(
-          padding: EdgeInsets.only(
-            left: 16,
-            right: 16,
-            bottom: MediaQuery.of(context).viewInsets.bottom + 16,
-            top: 16,
-          ),
-          child: SoftGlassCard(
-            padding: const EdgeInsets.all(18),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Configuración avanzada',
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-                const SizedBox(height: 6),
-                const Text(
-                  'Ajusta la URL del backend solo si estás probando en otro entorno.',
-                ),
-                const SizedBox(height: 14),
-                TextField(
-                  controller: tempCtrl,
-                  keyboardType: TextInputType.url,
-                  decoration: const InputDecoration(
-                    labelText: 'API Base URL',
-                    prefixIcon: Icon(Icons.link),
-                  ),
-                ),
-                const SizedBox(height: 14),
-                Row(
-                  children: [
-                    TextButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      child: const Text('Cancelar'),
-                    ),
-                    const Spacer(),
-                    FilledButton(
-                      onPressed: () {
-                        setState(() => _baseCtrl.text = tempCtrl.text.trim());
-                        Navigator.of(context).pop();
-                      },
-                      child: const Text('Guardar'),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-    tempCtrl.dispose();
   }
 
   Future<void> _submit() async {
@@ -112,8 +43,7 @@ class _AuthScreenState extends State<AuthScreen> {
       _error = null;
     });
     try {
-      await widget.onBaseUrlChanged(_baseCtrl.text.trim());
-      final api = ApiClient(baseUrl: _baseCtrl.text.trim());
+      final api = ApiClient(baseUrl: widget.baseUrl);
       final data = _registerMode
           ? await api.register(
               name: _nameCtrl.text.trim(),
@@ -149,22 +79,6 @@ class _AuthScreenState extends State<AuthScreen> {
       appBar: AppBar(
         foregroundColor: Colors.white,
         title: const Text(''),
-        actions: [
-          IconButton(
-            tooltip: 'Configurar servidor',
-            onPressed: _loading ? null : _openServerSettings,
-            icon: Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.16),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
-              ),
-              child: const Icon(Icons.tune, size: 18),
-            ),
-          ),
-          const SizedBox(width: 8),
-        ],
       ),
       body: AppShell(
         child: Center(

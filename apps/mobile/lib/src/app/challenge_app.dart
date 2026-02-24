@@ -9,10 +9,11 @@ class ChallengeApp extends StatefulWidget {
 
 class _ChallengeAppState extends State<ChallengeApp> {
   static const _secureStorage = FlutterSecureStorage();
+  static const _apiBaseUrlFromDefine = String.fromEnvironment('API_BASE_URL');
   final ScreenSecurityController _security = ScreenSecurityController();
 
   AuthSession? _session;
-  String _baseUrl = _defaultBaseUrl();
+  final String _baseUrl = _defaultBaseUrl();
   bool _booting = true;
 
   @override
@@ -22,6 +23,7 @@ class _ChallengeAppState extends State<ChallengeApp> {
   }
 
   static String _defaultBaseUrl() {
+    if (_apiBaseUrlFromDefine.isNotEmpty) return _apiBaseUrlFromDefine;
     if (kIsWeb) return 'http://localhost:3000';
     if (Platform.isAndroid) return 'http://10.0.2.2:3000';
     return 'http://localhost:3000';
@@ -30,8 +32,6 @@ class _ChallengeAppState extends State<ChallengeApp> {
   Future<void> _restore() async {
     await _security.initialize();
     final savedSession = await _secureStorage.read(key: 'auth_session');
-    final savedBase = await _secureStorage.read(key: 'api_base_url');
-    if (savedBase != null && savedBase.isNotEmpty) _baseUrl = savedBase;
     if (savedSession != null) {
       try {
         _session = AuthSession.fromJson(
@@ -52,12 +52,6 @@ class _ChallengeAppState extends State<ChallengeApp> {
         value: jsonEncode(session.toJson()),
       );
     }
-    if (mounted) setState(() {});
-  }
-
-  Future<void> _saveBaseUrl(String baseUrl) async {
-    _baseUrl = baseUrl;
-    await _secureStorage.write(key: 'api_base_url', value: baseUrl);
     if (mounted) setState(() {});
   }
 
@@ -171,7 +165,6 @@ class _ChallengeAppState extends State<ChallengeApp> {
               else if (_session == null)
                 AuthScreen(
                   baseUrl: _baseUrl,
-                  onBaseUrlChanged: _saveBaseUrl,
                   onAuthenticated: _saveSession,
                 )
               else
