@@ -23,6 +23,29 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
     try {
       final permission = await Permission.camera.request();
       if (!permission.isGranted) {
+        if (!mounted) return;
+        final openSettings = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Permiso de cámara requerido'),
+            content: const Text(
+              'Para capturar evidencias debes permitir el acceso a la cámara.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Cancelar'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('Abrir ajustes'),
+              ),
+            ],
+          ),
+        );
+        if (openSettings == true) {
+          await openAppSettings();
+        }
         throw Exception('Permiso de cámara denegado');
       }
       final cameras = await availableCameras();
