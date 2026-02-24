@@ -12,15 +12,12 @@ import {
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
-import { extname, join } from 'path';
-import { existsSync, mkdirSync } from 'fs';
-import { v4 as uuidv4 } from 'uuid';
+import { memoryStorage } from 'multer';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CreateSubmissionDto } from './dto/create-submission.dto';
+import { EvidenceStorageService } from './evidence-storage.service';
 import { UploadSubmissionPhotoDto } from './dto/upload-submission-photo.dto';
 import { SubmissionsService } from './submissions.service';
 
@@ -29,7 +26,7 @@ import { SubmissionsService } from './submissions.service';
 export class SubmissionsController {
   constructor(
     private readonly submissionsService: SubmissionsService,
-    private readonly configService: ConfigService,
+    private readonly evidenceStorageService: EvidenceStorageService,
   ) {}
 
   @Post()
@@ -57,20 +54,7 @@ export class SubmissionsController {
   @Post(':id/photos')
   @UseInterceptors(
     FileInterceptor('file', {
-      storage: diskStorage({
-        destination: (_req, _file, cb) => {
-          const uploadsDir = process.env.UPLOADS_DIR || './uploads';
-          const absolute = join(process.cwd(), uploadsDir);
-          if (!existsSync(absolute)) {
-            mkdirSync(absolute, { recursive: true });
-          }
-          cb(null, absolute);
-        },
-        filename: (_req, file, cb) => {
-          const extension = extname(file.originalname || '').toLowerCase() || '.jpg';
-          cb(null, `${Date.now()}-${uuidv4()}${extension}`);
-        },
-      }),
+      storage: memoryStorage(),
       fileFilter: (_req, file, cb) => {
         if (!file.mimetype.startsWith('image/')) {
           return cb(new BadRequestException('Only image files are allowed') as any, false);
@@ -90,14 +74,18 @@ export class SubmissionsController {
       throw new BadRequestException('File is required');
     }
 
-    const uploadsDir = this.configService.get<string>('UPLOADS_DIR') || './uploads';
-    const relativePath = join(uploadsDir, file.filename).replace(/\\/g, '/');
+    const photoPath = await this.evidenceStorageService.storeSubmissionPhoto({
+      file,
+      submissionId: id,
+      itemCode: dto.itemCode,
+      userId: user.id,
+    });
 
     return this.submissionsService.addEvidence({
       submissionId: id,
       userId: user.id,
       itemCode: dto.itemCode,
-      photoPath: relativePath,
+      photoPath,
     });
   }
 
