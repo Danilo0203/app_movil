@@ -14,6 +14,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
+import { extname } from 'path';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CreateSubmissionDto } from './dto/create-submission.dto';
@@ -56,7 +57,22 @@ export class SubmissionsController {
     FileInterceptor('file', {
       storage: memoryStorage(),
       fileFilter: (_req, file, cb) => {
-        if (!file.mimetype.startsWith('image/')) {
+        const mimeType = (file.mimetype || '').toLowerCase();
+        const fileExt = extname(file.originalname || '').toLowerCase();
+        const allowedImageExtensions = new Set([
+          '.jpg',
+          '.jpeg',
+          '.png',
+          '.webp',
+          '.heic',
+          '.heif',
+        ]);
+        const isImageMimeType = mimeType.startsWith('image/');
+        const isGenericBinaryImage =
+            mimeType == 'application/octet-stream' &&
+            allowedImageExtensions.has(fileExt);
+
+        if (!isImageMimeType && !isGenericBinaryImage) {
           return cb(new BadRequestException('Only image files are allowed') as any, false);
         }
         cb(null, true);
