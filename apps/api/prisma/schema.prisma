@@ -1,0 +1,69 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id           Int          @id @default(autoincrement())
+  name         String
+  email        String       @unique
+  passwordHash String
+  createdAt    DateTime     @default(now())
+
+  submissions Submission[]
+}
+
+model Challenge {
+  id          Int          @id @default(autoincrement())
+  title       String
+  type        ChallengeType @unique
+  itemsJson   Json
+  createdAt   DateTime     @default(now())
+
+  submissions Submission[]
+}
+
+model Submission {
+  id          Int              @id @default(autoincrement())
+  userId      Int
+  challengeId Int
+  status      SubmissionStatus @default(IN_PROGRESS)
+  createdAt   DateTime         @default(now())
+  completedAt DateTime?
+
+  user      User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  challenge Challenge            @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  evidences SubmissionEvidence[]
+}
+
+model SubmissionEvidence {
+  id           Int      @id @default(autoincrement())
+  submissionId Int
+  itemCode     String
+  photoPath    String
+  createdAt    DateTime @default(now())
+
+  submission Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@unique([submissionId, itemCode])
+}
+
+enum ChallengeType {
+  MYSTERY
+  OFFICE_SAFARI
+  TECHNICAL_INSPECTOR
+}
+
+enum SubmissionStatus {
+  IN_PROGRESS
+  COMPLETED
+}
