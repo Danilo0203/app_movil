@@ -85,15 +85,40 @@ class SubmissionModel {
     required this.id,
     required this.challengeId,
     required this.status,
+    required this.evidences,
   });
   final int id;
   final int challengeId;
   final String status;
+  final List<SubmissionEvidenceModel> evidences;
 
   factory SubmissionModel.fromJson(Map<String, dynamic> json) =>
       SubmissionModel(
         id: json['id'] as int,
         challengeId: json['challengeId'] as int,
         status: json['status'] as String,
+        evidences: (json['evidences'] as List<dynamic>? ?? const [])
+            .map(
+              (e) => SubmissionEvidenceModel.fromJson(
+                e as Map<String, dynamic>,
+              ),
+            )
+            .toList(),
+      );
+}
+
+class SubmissionEvidenceModel {
+  SubmissionEvidenceModel({
+    required this.itemCode,
+    required this.photoPath,
+  });
+
+  final String itemCode;
+  final String photoPath;
+
+  factory SubmissionEvidenceModel.fromJson(Map<String, dynamic> json) =>
+      SubmissionEvidenceModel(
+        itemCode: json['itemCode'] as String,
+        photoPath: json['photoPath'] as String,
       );
 }

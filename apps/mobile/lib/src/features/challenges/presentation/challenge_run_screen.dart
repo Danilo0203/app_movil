@@ -1,5 +1,7 @@
 part of '../../../../main.dart';
 
+final Map<int, Map<String, String>> _submissionLocalEvidenceCache = {};
+
 class ChallengeRunScreen extends StatefulWidget {
   const ChallengeRunScreen({
     super.key,
@@ -23,10 +25,41 @@ class _ChallengeRunScreenState extends State<ChallengeRunScreen> {
   bool _busy = false;
   String? _error;
 
+  @override
+  void initState() {
+    super.initState();
+    _restoreExistingSubmission();
+  }
+
+  Future<void> _restoreExistingSubmission() async {
+    try {
+      await _ensureSubmission();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
+    }
+  }
+
   Future<void> _ensureSubmission() async {
     if (_submission != null) return;
     final sub = await widget.api.createSubmission(widget.challenge.id);
-    setState(() => _submission = sub);
+    final restoredUploads = <String, String>{
+      for (final evidence in sub.evidences) evidence.itemCode: evidence.photoPath,
+    };
+    final restoredCaptured = <String, File>{};
+    final cachedPaths = _submissionLocalEvidenceCache[sub.id] ?? const {};
+    for (final entry in cachedPaths.entries) {
+      final file = File(entry.value);
+      if (await file.exists()) {
+        restoredCaptured[entry.key] = file;
+      }
+    }
+    if (!mounted) return;
+    setState(() {
+      _submission = sub;
+      _uploadPaths.addAll(restoredUploads);
+      _captured.addAll(restoredCaptured);
+    });
   }
 
   Future<void> _captureAndUpload(ChallengeItem item) async {
@@ -43,14 +76,20 @@ class _ChallengeRunScreenState extends State<ChallengeRunScreen> {
         ),
       );
       if (file == null) return;
-      _captured[item.code] = file;
       final res = await widget.api.uploadEvidence(
         submissionId: _submission!.id,
         itemCode: item.code,
         file: file,
       );
-      _uploadPaths[item.code] = res['photoPath']?.toString() ?? file.path;
-      if (mounted) setState(() {});
+      final photoPath = res['photoPath']?.toString() ?? file.path;
+      _submissionLocalEvidenceCache[_submission!.id] ??= {};
+      _submissionLocalEvidenceCache[_submission!.id]![item.code] = file.path;
+      if (mounted) {
+        setState(() {
+          _captured[item.code] = file;
+          _uploadPaths[item.code] = photoPath;
+        });
+      }
     } catch (e) {
       setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
     } finally {
@@ -116,7 +155,7 @@ class _ChallengeRunScreenState extends State<ChallengeRunScreen> {
   @override
   Widget build(BuildContext context) {
     final completedCount = widget.challenge.items
-        .where((i) => _captured.containsKey(i.code))
+        .where((i) => _uploadPaths.containsKey(i.code))
         .length;
     final isComplete =
         completedCount == widget.challenge.items.length &&
@@ -202,6 +241,8 @@ class _ChallengeRunScreenState extends State<ChallengeRunScreen> {
             final item = entry.value;
             final itemIndex = entry.key;
             final file = _captured[item.code];
+            final uploadedPath = _uploadPaths[item.code];
+            final isUploaded = uploadedPath != null;
             return FadeSlideIn(
               delay: Duration(milliseconds: 90 + (itemIndex * 35)),
               child: Padding(
@@ -246,6 +287,8 @@ class _ChallengeRunScreenState extends State<ChallengeRunScreen> {
                               Text(
                                 file != null
                                     ? p.basename(file.path)
+                                    : isUploaded
+                                    ? p.basename(uploadedPath)
                                     : 'Pendiente',
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
@@ -260,8 +303,12 @@ class _ChallengeRunScreenState extends State<ChallengeRunScreen> {
                             Icon(
                               file != null
                                   ? Icons.check_circle
+                                  : isUploaded
+                                  ? Icons.check_circle
                                   : Icons.radio_button_unchecked,
-                              color: file != null ? Colors.green : null,
+                              color: (file != null || isUploaded)
+                                  ? Colors.green
+                                  : null,
                             ),
                             const SizedBox(height: 6),
                             IconButton.filledTonal(
