@@ -111,6 +111,66 @@ class ApiClient {
     return _decodeList(res);
   }
 
+  Future<UserProfileModel> myProfile() async {
+    final res = await http
+        .get(_uri('/users/me'), headers: _headers(auth: true))
+        .timeout(_requestTimeout);
+    return UserProfileModel.fromJson(_decodeObject(res));
+  }
+
+  Future<UserProfileModel> updateMyProfile({
+    String? name,
+    String? email,
+    String? phone,
+    String? address,
+  }) async {
+    final payload = <String, dynamic>{};
+    if (name != null) payload['name'] = name;
+    if (email != null) payload['email'] = email;
+    if (phone != null) payload['phone'] = phone;
+    if (address != null) payload['address'] = address;
+
+    final res = await http
+        .patch(
+          _uri('/users/me'),
+          headers: _headers(auth: true),
+          body: jsonEncode(payload),
+        )
+        .timeout(_requestTimeout);
+    return UserProfileModel.fromJson(_decodeObject(res));
+  }
+
+  Future<void> changeMyPassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    final res = await http
+        .post(
+          _uri('/users/me/change-password'),
+          headers: _headers(auth: true),
+          body: jsonEncode({
+            'currentPassword': currentPassword,
+            'newPassword': newPassword,
+          }),
+        )
+        .timeout(_requestTimeout);
+    if (res.statusCode >= 400) throw Exception(_readError(res));
+  }
+
+  Future<UserProfileModel> uploadMyAvatar(File file) async {
+    final req = http.MultipartRequest('POST', _uri('/users/me/avatar'));
+    if (token != null) {
+      req.headers['Authorization'] = 'Bearer $token';
+    }
+    req.files.add(await http.MultipartFile.fromPath('file', file.path));
+    final streamed = await req.send().timeout(_requestTimeout);
+    final body = await streamed.stream.bytesToString();
+    if (streamed.statusCode >= 400) {
+      throw Exception(_parseErrorBody(body));
+    }
+    return UserProfileModel.fromJson(jsonDecode(body) as Map<String, dynamic>);
+  }
+
   Map<String, dynamic> _decodeObject(http.Response res) {
     if (res.statusCode >= 400) throw Exception(_readError(res));
     return jsonDecode(res.body) as Map<String, dynamic>;

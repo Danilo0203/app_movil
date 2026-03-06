@@ -80,6 +80,44 @@ class AuthSession {
   );
 }
 
+class UserProfileModel {
+  UserProfileModel({
+    required this.id,
+    required this.name,
+    required this.email,
+    this.phone,
+    this.address,
+    this.avatarUrl,
+    this.createdAt,
+    this.updatedAt,
+  });
+
+  final int id;
+  final String name;
+  final String email;
+  final String? phone;
+  final String? address;
+  final String? avatarUrl;
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
+
+  factory UserProfileModel.fromJson(Map<String, dynamic> json) =>
+      UserProfileModel(
+        id: json['id'] as int,
+        name: json['name'] as String? ?? '',
+        email: json['email'] as String? ?? '',
+        phone: json['phone'] as String?,
+        address: json['address'] as String?,
+        avatarUrl: json['avatarUrl'] as String?,
+        createdAt: json['createdAt'] != null
+            ? DateTime.tryParse(json['createdAt'].toString())
+            : null,
+        updatedAt: json['updatedAt'] != null
+            ? DateTime.tryParse(json['updatedAt'].toString())
+            : null,
+      );
+}
+
 class SubmissionModel {
   SubmissionModel({
     required this.id,
@@ -99,19 +137,15 @@ class SubmissionModel {
         status: json['status'] as String,
         evidences: (json['evidences'] as List<dynamic>? ?? const [])
             .map(
-              (e) => SubmissionEvidenceModel.fromJson(
-                e as Map<String, dynamic>,
-              ),
+              (e) =>
+                  SubmissionEvidenceModel.fromJson(e as Map<String, dynamic>),
             )
             .toList(),
       );
 }
 
 class SubmissionEvidenceModel {
-  SubmissionEvidenceModel({
-    required this.itemCode,
-    required this.photoPath,
-  });
+  SubmissionEvidenceModel({required this.itemCode, required this.photoPath});
 
   final String itemCode;
   final String photoPath;

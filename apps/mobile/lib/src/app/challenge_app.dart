@@ -71,49 +71,49 @@ class _ChallengeAppState extends State<ChallengeApp> {
           title: 'Retos Fotográficos',
           theme: ThemeData(
             colorScheme: ColorScheme.fromSeed(
-              seedColor: const Color(0xFF0B6E6E),
+              seedColor: const Color(0xFF0097B0),
               brightness: Brightness.light,
             ),
             useMaterial3: true,
-            scaffoldBackgroundColor: const Color(0xFFF3F7F8),
+            scaffoldBackgroundColor: const Color(0xFFE9F2F4),
             fontFamily: 'SF Pro Text',
             cardTheme: CardThemeData(
               elevation: 0,
               margin: EdgeInsets.zero,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(22),
-                side: const BorderSide(color: Color(0xFFE3EAED)),
+                side: const BorderSide(color: Color(0xFFD6E4E9)),
               ),
             ),
             appBarTheme: const AppBarTheme(
               backgroundColor: Colors.transparent,
               elevation: 0,
               scrolledUnderElevation: 0,
-              foregroundColor: Color(0xFF11252A),
+              foregroundColor: Color(0xFF0E2433),
               centerTitle: false,
             ),
             navigationBarTheme: NavigationBarThemeData(
-              height: 72,
-              backgroundColor: Colors.white.withValues(alpha: 0.95),
-              indicatorColor: const Color(0xFF0B6E6E).withValues(alpha: 0.12),
+              height: 76,
+              backgroundColor: Colors.white.withValues(alpha: 0.97),
+              indicatorColor: const Color(0xFF00A4B8).withValues(alpha: 0.14),
               labelTextStyle: WidgetStateProperty.resolveWith((states) {
                 return TextStyle(
                   fontWeight: states.contains(WidgetState.selected)
                       ? FontWeight.w700
                       : FontWeight.w500,
                   color: states.contains(WidgetState.selected)
-                      ? const Color(0xFF0B6E6E)
-                      : const Color(0xFF42565E),
+                      ? const Color(0xFF008FA6)
+                      : const Color(0xFF5C6F85),
                 );
               }),
             ),
             filledButtonTheme: FilledButtonThemeData(
               style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFF0A6B79),
+                backgroundColor: const Color(0xFF045C94),
                 foregroundColor: Colors.white,
                 minimumSize: const Size.fromHeight(54),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(18),
+                  borderRadius: BorderRadius.circular(20),
                 ),
                 textStyle: const TextStyle(
                   fontWeight: FontWeight.w700,
@@ -130,23 +130,23 @@ class _ChallengeAppState extends State<ChallengeApp> {
             ),
             inputDecorationTheme: InputDecorationTheme(
               filled: true,
-              fillColor: const Color(0xFFF9FBFC),
+              fillColor: const Color(0xFFF7FAFB),
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: 14,
                 vertical: 14,
               ),
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(16),
-                borderSide: const BorderSide(color: Color(0xFFD9E3E8)),
+                borderRadius: BorderRadius.circular(18),
+                borderSide: const BorderSide(color: Color(0xFFCFE0E6)),
               ),
               enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(16),
-                borderSide: const BorderSide(color: Color(0xFFD9E3E8)),
+                borderRadius: BorderRadius.circular(18),
+                borderSide: const BorderSide(color: Color(0xFFCFE0E6)),
               ),
               focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(18),
                 borderSide: const BorderSide(
-                  color: Color(0xFF0B6E6E),
+                  color: Color(0xFF0097B0),
                   width: 1.5,
                 ),
               ),
@@ -163,14 +163,12 @@ class _ChallengeAppState extends State<ChallengeApp> {
               if (_booting)
                 const Scaffold(body: Center(child: CircularProgressIndicator()))
               else if (_session == null)
-                AuthScreen(
-                  baseUrl: _baseUrl,
-                  onAuthenticated: _saveSession,
-                )
+                AuthScreen(baseUrl: _baseUrl, onAuthenticated: _saveSession)
               else
                 HomeScreen(
                   baseUrl: _baseUrl,
                   session: _session!,
+                  onSessionUpdated: _saveSession,
                   onLogout: () => _saveSession(null),
                 ),
               if (_security.shouldObscure)

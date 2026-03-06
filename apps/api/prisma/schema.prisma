@@ -17,7 +17,11 @@ model User {
   name         String
   email        String       @unique
   passwordHash String
+  phone        String?
+  address      String?
+  avatarUrl    String?
   createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
 
   submissions Submission[]
 }

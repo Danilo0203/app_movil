@@ -42,7 +42,8 @@ export class RankingService {
 
       if (
         submission.completedAt &&
-        (!existing.lastCompletedAt || submission.completedAt > existing.lastCompletedAt)
+        (!existing.lastCompletedAt ||
+          submission.completedAt > existing.lastCompletedAt)
       ) {
         existing.lastCompletedAt = submission.completedAt;
       }

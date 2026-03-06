@@ -6,7 +6,6 @@ class AppShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return Stack(
       children: [
         Positioned.fill(
@@ -16,38 +15,38 @@ class AppShell extends StatelessWidget {
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
-                  const Color(0xFF0C6877),
-                  const Color(0xFF127788).withValues(alpha: 0.92),
-                  const Color(0xFFEAF3F5),
-                  const Color(0xFFF5F8F9),
+                  const Color(0xFF073E74),
+                  const Color(0xFF0A6CA0),
+                  const Color(0xFF02A9B7),
+                  const Color(0xFFC9EBEC),
                 ],
-                stops: const [0, 0.26, 0.62, 1],
+                stops: const [0, 0.27, 0.64, 1],
               ),
             ),
           ),
         ),
         Positioned(
-          top: -40,
-          left: -30,
+          top: -76,
+          left: -90,
           child: _DecorCircle(
-            size: 190,
+            size: 300,
+            color: Colors.white.withValues(alpha: 0.07),
+          ),
+        ),
+        Positioned(
+          top: 250,
+          right: -70,
+          child: _DecorCircle(
+            size: 180,
+            color: Colors.white.withValues(alpha: 0.09),
+          ),
+        ),
+        Positioned(
+          bottom: 120,
+          left: -80,
+          child: _DecorCircle(
+            size: 220,
             color: Colors.white.withValues(alpha: 0.08),
-          ),
-        ),
-        Positioned(
-          top: 90,
-          right: -45,
-          child: _DecorCircle(
-            size: 160,
-            color: Colors.white.withValues(alpha: 0.06),
-          ),
-        ),
-        Positioned(
-          top: 220,
-          left: 35,
-          child: _DecorCircle(
-            size: 80,
-            color: scheme.primaryContainer.withValues(alpha: 0.22),
           ),
         ),
         child,
@@ -128,7 +127,7 @@ class SummaryChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: scheme.surfaceContainerHighest.withValues(alpha: 0.7),
+        color: const Color(0xFFEAF4F6).withValues(alpha: 0.92),
         borderRadius: BorderRadius.circular(14),
       ),
       child: Row(
@@ -201,14 +200,14 @@ class SoftGlassCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.92),
-        borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.65)),
+        color: const Color(0xFFF2F7F8).withValues(alpha: 0.93),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.7)),
         boxShadow: const [
           BoxShadow(
-            color: Color(0x14000000),
-            blurRadius: 28,
-            offset: Offset(0, 16),
+            color: Color(0x1300243D),
+            blurRadius: 24,
+            offset: Offset(0, 10),
           ),
         ],
       ),

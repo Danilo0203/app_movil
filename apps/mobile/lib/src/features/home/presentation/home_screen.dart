@@ -5,11 +5,13 @@ class HomeScreen extends StatefulWidget {
     super.key,
     required this.baseUrl,
     required this.session,
+    required this.onSessionUpdated,
     required this.onLogout,
   });
 
   final String baseUrl;
   final AuthSession session;
+  final Future<void> Function(AuthSession session) onSessionUpdated;
   final VoidCallback onLogout;
 
   @override
@@ -28,7 +30,12 @@ class _HomeScreenState extends State<HomeScreen> {
     final pages = [
       ChallengesScreen(session: widget.session, api: api),
       RankingScreen(api: api, currentUserId: widget.session.userId),
-      ProfileScreen(session: widget.session, onLogout: widget.onLogout),
+      ProfileScreen(
+        session: widget.session,
+        api: api,
+        onSessionUpdated: widget.onSessionUpdated,
+        onLogout: widget.onLogout,
+      ),
     ];
 
     return Scaffold(

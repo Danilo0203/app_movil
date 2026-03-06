@@ -33,6 +33,7 @@ part 'src/features/reports/services/pdf_report_service.dart';
 part 'src/features/reports/presentation/pdf_preview_screen.dart';
 part 'src/features/ranking/presentation/ranking_screen.dart';
 part 'src/features/profile/presentation/profile_screen.dart';
+part 'src/features/profile/presentation/profile_edit_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();

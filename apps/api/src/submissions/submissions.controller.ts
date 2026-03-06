@@ -69,11 +69,14 @@ export class SubmissionsController {
         ]);
         const isImageMimeType = mimeType.startsWith('image/');
         const isGenericBinaryImage =
-            mimeType == 'application/octet-stream' &&
-            allowedImageExtensions.has(fileExt);
+          mimeType == 'application/octet-stream' &&
+          allowedImageExtensions.has(fileExt);
 
         if (!isImageMimeType && !isGenericBinaryImage) {
-          return cb(new BadRequestException('Only image files are allowed') as any, false);
+          return cb(
+            new BadRequestException('Only image files are allowed') as any,
+            false,
+          );
         }
         cb(null, true);
       },
