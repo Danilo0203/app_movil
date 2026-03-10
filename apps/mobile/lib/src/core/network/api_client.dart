@@ -69,7 +69,7 @@ class ApiClient {
           body: jsonEncode({'challengeId': challengeId}),
         )
         .timeout(_requestTimeout);
-    return SubmissionModel.fromJson(_decodeObject(res));
+    return _submissionFromJson(_decodeObject(res));
   }
 
   Future<Map<String, dynamic>> uploadEvidence({
@@ -102,6 +102,14 @@ class ApiClient {
         )
         .timeout(_requestTimeout);
     return _decodeObject(res);
+  }
+
+  Future<List<SubmissionModel>> mySubmissions() async {
+    final res = await http
+        .get(_uri('/submissions/my'), headers: _headers(auth: true))
+        .timeout(_requestTimeout);
+    final list = _decodeList(res);
+    return list.map(_submissionFromJson).toList();
   }
 
   Future<List<Map<String, dynamic>>> ranking() async {
@@ -179,12 +187,32 @@ class ApiClient {
     );
   }
 
+  SubmissionModel _submissionFromJson(Map<String, dynamic> json) {
+    return SubmissionModel.fromJson(_normalizeSubmissionJson(json));
+  }
+
   Map<String, dynamic> _normalizeUserProfileJson(Map<String, dynamic> json) {
     final avatarUrl = json['avatarUrl']?.toString().trim();
     if (avatarUrl == null || avatarUrl.isEmpty) return json;
 
     final normalized = Map<String, dynamic>.from(json);
     normalized['avatarUrl'] = _resolveAssetUrl(avatarUrl);
+    return normalized;
+  }
+
+  Map<String, dynamic> _normalizeSubmissionJson(Map<String, dynamic> json) {
+    final normalized = Map<String, dynamic>.from(json);
+    final evidences = json['evidences'];
+    if (evidences is! List) return normalized;
+
+    normalized['evidences'] = evidences.map((entry) {
+      final evidence = Map<String, dynamic>.from(entry as Map);
+      final photoPath = evidence['photoPath']?.toString().trim();
+      if (photoPath != null && photoPath.isNotEmpty) {
+        evidence['photoPath'] = _resolveAssetUrl(photoPath);
+      }
+      return evidence;
+    }).toList();
     return normalized;
   }
 

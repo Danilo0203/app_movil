@@ -20,9 +20,9 @@ export class SubmissionsService {
     }
 
     const existing = await this.prisma.submission.findFirst({
-      where: { userId, challengeId, status: SubmissionStatus.IN_PROGRESS },
+      where: { userId, challengeId },
       include: { challenge: true, evidences: true },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
     });
     if (existing) {
       return existing;

@@ -13,6 +13,7 @@ class _ChallengesScreenState extends State<ChallengesScreen> {
   bool _loading = true;
   String? _error;
   List<ChallengeModel> _challenges = const [];
+  List<SubmissionModel> _submissions = const [];
 
   @override
   void initState() {
@@ -27,12 +28,17 @@ class _ChallengesScreenState extends State<ChallengesScreen> {
     });
     try {
       var list = await widget.api.listChallenges();
+      var submissions = await widget.api.mySubmissions();
       if (list.isEmpty) {
         await widget.api.seedChallenges();
         list = await widget.api.listChallenges();
+        submissions = await widget.api.mySubmissions();
       }
       if (mounted) {
-        setState(() => _challenges = list);
+        setState(() {
+          _challenges = list;
+          _submissions = submissions;
+        });
       }
     } catch (e) {
       if (mounted) {
@@ -50,14 +56,30 @@ class _ChallengesScreenState extends State<ChallengesScreen> {
     (sum, challenge) => sum + challenge.items.length,
   );
 
-  int _simulatedCaptured(int index, ChallengeModel challenge) {
-    if (index == 0) return challenge.items.length.clamp(1, 3);
-    return 0;
+  Map<int, SubmissionModel> get _latestSubmissionByChallenge {
+    final latest = <int, SubmissionModel>{};
+    for (final submission in _submissions) {
+      final current = latest[submission.challengeId];
+      if (current == null || submission.id > current.id) {
+        latest[submission.challengeId] = submission;
+      }
+    }
+    return latest;
   }
 
-  String _statusFor(int index) {
-    if (index == 0) return 'En progreso';
-    return 'Sin empezar';
+  int get _capturedEvidenceCount => _latestSubmissionByChallenge.values.fold(
+    0,
+    (sum, submission) => sum + submission.evidences.length,
+  );
+
+  int _capturedFor(ChallengeModel challenge) {
+    return _latestSubmissionByChallenge[challenge.id]?.evidences.length ?? 0;
+  }
+
+  String _statusFor(ChallengeModel challenge) {
+    final submission = _latestSubmissionByChallenge[challenge.id];
+    if (submission == null) return 'Sin empezar';
+    return submission.status == 'COMPLETED' ? 'Completado' : 'En progreso';
   }
 
   int _minutesFor(ChallengeType type) {
@@ -86,7 +108,9 @@ class _ChallengesScreenState extends State<ChallengesScreen> {
   Widget build(BuildContext context) {
     final welcomeName = widget.session.userName;
     final protectedLabel = _loading ? '...' : 'Activo';
-    final evidencesLabel = _loading ? '...' : '1/$_totalEvidenceGoal';
+    final evidencesLabel = _loading
+        ? '...'
+        : '$_capturedEvidenceCount/$_totalEvidenceGoal';
 
     return RefreshIndicator(
       onRefresh: _load,
@@ -214,8 +238,8 @@ class _ChallengesScreenState extends State<ChallengesScreen> {
             ..._challenges.asMap().entries.map((entry) {
               final index = entry.key;
               final challenge = entry.value;
-              final status = _statusFor(index);
-              final captured = _simulatedCaptured(index, challenge);
+              final status = _statusFor(challenge);
+              final captured = _capturedFor(challenge);
               final maxEvidence = challenge.items.length;
 
               void open() {
@@ -382,6 +406,7 @@ class _ChallengeItemCard extends StatelessWidget {
   final VoidCallback onTap;
 
   bool get _inProgress => status == 'En progreso';
+  bool get _completed => status == 'Completado';
 
   @override
   Widget build(BuildContext context) {
@@ -471,12 +496,16 @@ class _ChallengeItemCard extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: _inProgress
                         ? const Color(0xFF62BB3A)
+                        : _completed
+                        ? const Color(0xFF0FA8B3)
                         : const Color(0xFFE1EFF1),
                     borderRadius: BorderRadius.circular(17),
                   ),
                   child: Icon(
                     Icons.chevron_right,
-                    color: _inProgress ? Colors.white : const Color(0xFF54A9AD),
+                    color: (_inProgress || _completed)
+                        ? Colors.white
+                        : const Color(0xFF54A9AD),
                   ),
                 ),
               ),
@@ -510,6 +539,8 @@ class _ChallengeItemCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(999),
                   color: _inProgress
                       ? const Color(0xFFFFE0B5)
+                      : _completed
+                      ? const Color(0xFFD9F1F2)
                       : const Color(0xFFDDEFF7),
                 ),
                 child: Text(
@@ -519,6 +550,8 @@ class _ChallengeItemCard extends StatelessWidget {
                     fontSize: 12,
                     color: _inProgress
                         ? const Color(0xFFC86A00)
+                        : _completed
+                        ? const Color(0xFF0B8792)
                         : const Color(0xFF206B91),
                   ),
                 ),
