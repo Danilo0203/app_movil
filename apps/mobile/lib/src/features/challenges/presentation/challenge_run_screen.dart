@@ -44,7 +44,8 @@ class _ChallengeRunScreenState extends State<ChallengeRunScreen> {
     if (_submission != null) return;
     final sub = await widget.api.createSubmission(widget.challenge.id);
     final restoredUploads = <String, String>{
-      for (final evidence in sub.evidences) evidence.itemCode: evidence.photoPath,
+      for (final evidence in sub.evidences)
+        evidence.itemCode: evidence.photoPath,
     };
     final restoredCaptured = <String, File>{};
     final cachedPaths = _submissionLocalEvidenceCache[sub.id] ?? const {};
@@ -243,6 +244,8 @@ class _ChallengeRunScreenState extends State<ChallengeRunScreen> {
             final file = _captured[item.code];
             final uploadedPath = _uploadPaths[item.code];
             final isUploaded = uploadedPath != null;
+            final hasRemotePreview =
+                uploadedPath != null && uploadedPath.startsWith('http');
             return FadeSlideIn(
               delay: Duration(milliseconds: 90 + (itemIndex * 35)),
               child: Padding(
@@ -260,6 +263,27 @@ class _ChallengeRunScreenState extends State<ChallengeRunScreen> {
                               width: 56,
                               height: 56,
                               fit: BoxFit.cover,
+                            ),
+                          )
+                        else if (hasRemotePreview)
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: Image.network(
+                              uploadedPath,
+                              width: 56,
+                              height: 56,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, _, _) => Container(
+                                width: 56,
+                                height: 56,
+                                decoration: BoxDecoration(
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.surfaceContainerHighest,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: const Icon(Icons.broken_image_outlined),
+                              ),
                             ),
                           )
                         else

@@ -28,6 +28,19 @@ export class EvidenceStorageService {
     return this.storeOnDisk(params.file, objectName);
   }
 
+  resolvePhotoPath(photoPath: string): string {
+    if (!photoPath) return photoPath;
+    if (photoPath.startsWith('supabase://')) {
+      return this.resolveSupabasePublicUrl(photoPath);
+    }
+    if (/^https?:\/\//i.test(photoPath)) {
+      return photoPath;
+    }
+
+    const normalized = photoPath.replace(/\\/g, '/');
+    return normalized.startsWith('/') ? normalized : `/${normalized}`;
+  }
+
   private hasSupabaseConfig(): boolean {
     return Boolean(
       this.configService.get<string>('SUPABASE_URL') &&
@@ -69,6 +82,29 @@ export class EvidenceStorageService {
     }
 
     return `supabase://${bucket}/${objectName}`;
+  }
+
+  private resolveSupabasePublicUrl(photoPath: string): string {
+    const match = /^supabase:\/\/([^/]+)\/(.+)$/.exec(photoPath);
+    if (!match) {
+      return photoPath;
+    }
+
+    const [, bucket, objectName] = match;
+    const url = this.configService.get<string>('SUPABASE_URL');
+    const serviceRoleKey = this.configService.get<string>(
+      'SUPABASE_SERVICE_ROLE_KEY',
+    );
+
+    if (!url || !serviceRoleKey) {
+      return photoPath;
+    }
+
+    const client = createClient(url, serviceRoleKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+    const { data } = client.storage.from(bucket).getPublicUrl(objectName);
+    return data.publicUrl || photoPath;
   }
 
   private async storeOnDisk(

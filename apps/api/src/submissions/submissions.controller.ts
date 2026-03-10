@@ -36,12 +36,18 @@ export class SubmissionsController {
     @CurrentUser() user: { id: number },
     @Body() dto: CreateSubmissionDto,
   ) {
-    return this.submissionsService.create(user.id, dto.challengeId);
+    return this.submissionsService
+      .create(user.id, dto.challengeId)
+      .then((submission) => this.serializeSubmission(submission));
   }
 
   @Get('my')
   my(@CurrentUser() user: { id: number }) {
-    return this.submissionsService.mySubmissions(user.id);
+    return this.submissionsService
+      .mySubmissions(user.id)
+      .then((submissions) =>
+        submissions.map((submission) => this.serializeSubmission(submission)),
+      );
   }
 
   @Get(':id')
@@ -49,7 +55,9 @@ export class SubmissionsController {
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser() user: { id: number },
   ) {
-    return this.submissionsService.findOneForUser(id, user.id);
+    return this.submissionsService
+      .findOneForUser(id, user.id)
+      .then((submission) => this.serializeSubmission(submission));
   }
 
   @Post(':id/photos')
@@ -105,7 +113,12 @@ export class SubmissionsController {
       userId: user.id,
       itemCode: dto.itemCode,
       photoPath,
-    });
+    }).then((evidence) => ({
+      ...evidence,
+      photoPath: this.evidenceStorageService.resolvePhotoPath(
+        evidence.photoPath,
+      ),
+    }));
   }
 
   @Post(':id/complete')
@@ -113,6 +126,22 @@ export class SubmissionsController {
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser() user: { id: number },
   ) {
-    return this.submissionsService.complete(id, user.id);
+    return this.submissionsService
+      .complete(id, user.id)
+      .then((submission) => this.serializeSubmission(submission));
+  }
+
+  private serializeSubmission<T extends { evidences: Array<{ photoPath: string }> }>(
+    submission: T,
+  ): T {
+    return {
+      ...submission,
+      evidences: submission.evidences.map((evidence) => ({
+        ...evidence,
+        photoPath: this.evidenceStorageService.resolvePhotoPath(
+          evidence.photoPath,
+        ),
+      })),
+    };
   }
 }
