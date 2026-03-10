@@ -115,7 +115,7 @@ class ApiClient {
     final res = await http
         .get(_uri('/users/me'), headers: _headers(auth: true))
         .timeout(_requestTimeout);
-    return UserProfileModel.fromJson(_decodeObject(res));
+    return _decodeUserProfile(res);
   }
 
   Future<UserProfileModel> updateMyProfile({
@@ -137,7 +137,7 @@ class ApiClient {
           body: jsonEncode(payload),
         )
         .timeout(_requestTimeout);
-    return UserProfileModel.fromJson(_decodeObject(res));
+    return _decodeUserProfile(res);
   }
 
   Future<void> changeMyPassword({
@@ -168,7 +168,30 @@ class ApiClient {
     if (streamed.statusCode >= 400) {
       throw Exception(_parseErrorBody(body));
     }
-    return UserProfileModel.fromJson(jsonDecode(body) as Map<String, dynamic>);
+    return UserProfileModel.fromJson(
+      _normalizeUserProfileJson(jsonDecode(body) as Map<String, dynamic>),
+    );
+  }
+
+  UserProfileModel _decodeUserProfile(http.Response res) {
+    return UserProfileModel.fromJson(
+      _normalizeUserProfileJson(_decodeObject(res)),
+    );
+  }
+
+  Map<String, dynamic> _normalizeUserProfileJson(Map<String, dynamic> json) {
+    final avatarUrl = json['avatarUrl']?.toString().trim();
+    if (avatarUrl == null || avatarUrl.isEmpty) return json;
+
+    final normalized = Map<String, dynamic>.from(json);
+    normalized['avatarUrl'] = _resolveAssetUrl(avatarUrl);
+    return normalized;
+  }
+
+  String _resolveAssetUrl(String value) {
+    final parsed = Uri.tryParse(value);
+    if (parsed != null && parsed.hasScheme) return value;
+    return _uri(value.startsWith('/') ? value : '/$value').toString();
   }
 
   Map<String, dynamic> _decodeObject(http.Response res) {

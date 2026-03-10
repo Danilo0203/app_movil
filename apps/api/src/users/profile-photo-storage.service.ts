@@ -44,7 +44,6 @@ export class ProfilePhotoStorageService {
     );
     const bucket =
       this.configService.get<string>('SUPABASE_PROFILE_BUCKET') ||
-      this.configService.get<string>('SUPABASE_STORAGE_BUCKET') ||
       'profile-photos';
 
     const client = createClient(url, serviceRoleKey, {
@@ -58,10 +57,17 @@ export class ProfilePhotoStorageService {
         upsert: false,
       });
     if (error) {
-      throw new Error(`Supabase upload failed: ${error.message}`);
+      throw new Error(
+        `Supabase upload failed for bucket "${bucket}": ${error.message}`,
+      );
     }
 
     const { data } = client.storage.from(bucket).getPublicUrl(objectName);
+    if (!data.publicUrl) {
+      throw new Error(
+        `Supabase public URL failed for bucket "${bucket}". Verify that the bucket exists and is public.`,
+      );
+    }
     return data.publicUrl;
   }
 
@@ -76,6 +82,8 @@ export class ProfilePhotoStorageService {
     const absoluteDir = join(process.cwd(), uploadsDir, 'avatars');
     await mkdir(absoluteDir, { recursive: true });
     await writeFile(join(absoluteDir, fileName), file.buffer);
-    return join(uploadsDir, 'avatars', fileName).replace(/\\/g, '/');
+    const publicPrefix =
+      uploadsDir.replace(/\\/g, '/').split('/').pop() || 'uploads';
+    return `/${publicPrefix}/avatars/${fileName}`;
   }
 }
