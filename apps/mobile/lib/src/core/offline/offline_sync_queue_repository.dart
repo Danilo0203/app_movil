@@ -54,9 +54,14 @@ class OfflineSyncQueueRepository {
     final database = await _db.database;
     final rows = await database.query(
       'sync_queue',
-      where: 'status != ?',
-      whereArgs: [SyncStatus.synced.value],
-      orderBy: 'created_at ASC, id ASC',
+      where: 'status IN (?, ?)',
+      whereArgs: [SyncStatus.pending.value, SyncStatus.error.value],
+      orderBy:
+          "CASE status "
+          "WHEN '${SyncStatus.pending.value}' THEN 0 "
+          "WHEN '${SyncStatus.error.value}' THEN 1 "
+          "ELSE 2 END, "
+          'created_at ASC, id ASC',
     );
     return rows.map(SyncQueueItem.fromMap).toList();
   }

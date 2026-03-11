@@ -34,18 +34,30 @@ class SyncManager {
         final items = await _queueRepository.pendingItems();
         if (items.isEmpty) break;
         final item = items.first;
+        debugPrint(
+          '[sync] processing ${item.entityType}:${item.operationType} '
+          'entity=${item.entityLocalId} retry=${item.retryCount}',
+        );
         await _queueRepository.markSyncing(item.id);
         onChanged();
         try {
           await _processItem(api, session, item);
+          debugPrint(
+            '[sync] done ${item.entityType}:${item.operationType} '
+            'entity=${item.entityLocalId}',
+          );
           await _queueRepository.markDone(item.id);
         } catch (error) {
+          debugPrint(
+            '[sync] error ${item.entityType}:${item.operationType} '
+            'entity=${item.entityLocalId} message=${error.toString().replaceFirst('Exception: ', '')}',
+          );
           await _queueRepository.markError(
             item.id,
             error.toString().replaceFirst('Exception: ', ''),
             item.retryCount + 1,
           );
-          break;
+          await _markEntityError(item, error);
         } finally {
           onChanged();
         }
@@ -76,6 +88,57 @@ class SyncManager {
         return;
       case 'profile:avatar':
         await _processProfileAvatar(api, session, item);
+        return;
+    }
+  }
+
+  Future<void> _markEntityError(SyncQueueItem item, Object error) async {
+    final message = error.toString().replaceFirst('Exception: ', '');
+    switch ('${item.entityType}:${item.operationType}') {
+      case 'submission:create':
+      case 'submission:complete':
+        final submission = await _databaseService.findSubmissionByLocalId(
+          item.entityLocalId,
+        );
+        if (submission == null) return;
+        await _databaseService.upsertSubmission(
+          LocalSubmissionRecord(
+            localId: submission.localId,
+            userId: submission.userId,
+            challengeId: submission.challengeId,
+            remoteId: submission.remoteId,
+            status: submission.status,
+            syncStatus: SyncStatus.error,
+            pendingComplete: submission.pendingComplete,
+            lastError: message,
+            createdAt: submission.createdAt,
+            updatedAt: DateTime.now(),
+          ),
+        );
+        return;
+      case 'evidence:upload':
+        final evidence = await _databaseService.findEvidence(
+          submissionLocalId: item.payload['submissionLocalId'] as String,
+          itemCode: item.payload['itemCode'] as String,
+        );
+        if (evidence == null) return;
+        await _databaseService.upsertEvidence(
+          LocalEvidenceRecord(
+            localId: evidence.localId,
+            submissionLocalId: evidence.submissionLocalId,
+            itemCode: evidence.itemCode,
+            localFilePath: evidence.localFilePath,
+            remotePhotoPath: evidence.remotePhotoPath,
+            syncStatus: SyncStatus.error,
+            clientRequestId: evidence.clientRequestId,
+            lastError: message,
+            createdAt: evidence.createdAt,
+            updatedAt: DateTime.now(),
+          ),
+        );
+        return;
+      case 'profile:update':
+      case 'profile:avatar':
         return;
     }
   }
@@ -131,6 +194,11 @@ class SyncManager {
     if (!await file.exists()) {
       throw Exception('No se encontró la evidencia local para sincronizar.');
     }
+
+    debugPrint(
+      '[sync] upload evidence submissionLocalId=${evidence.submissionLocalId} '
+      'itemCode=${evidence.itemCode} path=${evidence.localFilePath}',
+    );
 
     final result = await api.uploadEvidence(
       submissionId: submission.remoteId!,
