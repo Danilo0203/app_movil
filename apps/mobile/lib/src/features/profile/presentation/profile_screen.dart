@@ -19,6 +19,7 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
+  final OfflineAppController _offline = OfflineAppController.instance;
   bool _loading = true;
   String? _error;
   UserProfileModel? _profile;
@@ -35,7 +36,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _error = null;
     });
     try {
-      final profile = await widget.api.myProfile();
+      final result = await _offline.loadProfile();
+      final profile =
+          result.value ??
+          UserProfileModel(
+            id: widget.session.userId,
+            name: widget.session.userName,
+            email: widget.session.userEmail,
+          );
       if (!mounted) return;
       setState(() => _profile = profile);
     } catch (e) {
@@ -67,6 +75,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (updated == null || !mounted) return;
 
     setState(() => _profile = updated);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          _offline.isOnline
+              ? 'Cambios guardados. La sincronización ya fue programada.'
+              : 'Cambios guardados offline.',
+        ),
+      ),
+    );
     if (updated.name != widget.session.userName ||
         updated.email != widget.session.userEmail) {
       await widget.onSessionUpdated(
@@ -93,6 +110,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         : 'Sin dirección registrada';
     final memberSince = _formatMemberSince(profile?.createdAt);
     final avatarUrl = profile?.avatarUrl?.trim();
+    final localAvatarPath = profile?.localAvatarPath?.trim();
+    final hasLocalAvatar =
+        localAvatarPath != null && localAvatarPath.isNotEmpty;
     final hasRemoteAvatar = avatarUrl != null && avatarUrl.startsWith('http');
 
     return RefreshIndicator(
@@ -155,7 +175,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             colors: [Color(0xFF23A4A7), Color(0xFF57B63F)],
                           ),
                           borderRadius: BorderRadius.circular(18),
-                          image: hasRemoteAvatar
+                          image: hasLocalAvatar
+                              ? DecorationImage(
+                                  image: FileImage(File(localAvatarPath)),
+                                  fit: BoxFit.cover,
+                                )
+                              : hasRemoteAvatar
                               ? DecorationImage(
                                   image: NetworkImage(avatarUrl),
                                   fit: BoxFit.cover,
@@ -210,6 +235,40 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ],
                   ),
                   const SizedBox(height: 12),
+                  if (profile?.syncStatus != null &&
+                      profile!.syncStatus != SyncStatus.synced)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 12,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFF3DD),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: const Color(0xFFFFD59B)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.sync_outlined,
+                            color: Color(0xFFAD6A00),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              'Tienes cambios de perfil pendientes de sincronizar.',
+                              style: const TextStyle(
+                                color: Color(0xFF8A5600),
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  if (profile?.syncStatus != null &&
+                      profile!.syncStatus != SyncStatus.synced)
+                    const SizedBox(height: 8),
                   Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 14,

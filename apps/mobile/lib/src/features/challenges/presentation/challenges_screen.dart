@@ -10,10 +10,12 @@ class ChallengesScreen extends StatefulWidget {
 }
 
 class _ChallengesScreenState extends State<ChallengesScreen> {
+  final OfflineAppController _offline = OfflineAppController.instance;
   bool _loading = true;
   String? _error;
   List<ChallengeModel> _challenges = const [];
   List<SubmissionModel> _submissions = const [];
+  bool _showingCached = false;
 
   @override
   void initState() {
@@ -27,17 +29,13 @@ class _ChallengesScreenState extends State<ChallengesScreen> {
       _error = null;
     });
     try {
-      var list = await widget.api.listChallenges();
-      var submissions = await widget.api.mySubmissions();
-      if (list.isEmpty) {
-        await widget.api.seedChallenges();
-        list = await widget.api.listChallenges();
-        submissions = await widget.api.mySubmissions();
-      }
+      final result = await _offline.loadChallenges();
+      final submissions = await _offline.loadSubmissions();
       if (mounted) {
         setState(() {
-          _challenges = list;
+          _challenges = result.items;
           _submissions = submissions;
+          _showingCached = result.fromCache;
         });
       }
     } catch (e) {
@@ -60,7 +58,15 @@ class _ChallengesScreenState extends State<ChallengesScreen> {
     final latest = <int, SubmissionModel>{};
     for (final submission in _submissions) {
       final current = latest[submission.challengeId];
-      if (current == null || submission.id > current.id) {
+      if (current == null) {
+        latest[submission.challengeId] = submission;
+        continue;
+      }
+      final currentUpdated =
+          current.updatedAt ?? current.createdAt ?? DateTime(1970);
+      final nextUpdated =
+          submission.updatedAt ?? submission.createdAt ?? DateTime(1970);
+      if (nextUpdated.isAfter(currentUpdated)) {
         latest[submission.challengeId] = submission;
       }
     }
@@ -78,7 +84,16 @@ class _ChallengesScreenState extends State<ChallengesScreen> {
 
   String _statusFor(ChallengeModel challenge) {
     final submission = _latestSubmissionByChallenge[challenge.id];
-    if (submission == null) return 'Sin empezar';
+    if (submission == null) {
+      return 'Sin empezar';
+    }
+    if (submission.syncStatus == SyncStatus.error) {
+      return 'Error al sincronizar';
+    }
+    if (submission.pendingComplete ||
+        submission.syncStatus != SyncStatus.synced) {
+      return 'Pendiente de sync';
+    }
     return submission.status == 'COMPLETED' ? 'Completado' : 'En progreso';
   }
 
@@ -107,7 +122,9 @@ class _ChallengesScreenState extends State<ChallengesScreen> {
   @override
   Widget build(BuildContext context) {
     final welcomeName = widget.session.userName;
-    final protectedLabel = _loading ? '...' : 'Activo';
+    final protectedLabel = _loading
+        ? '...'
+        : (_offline.isOnline ? 'Online' : 'Offline');
     final evidencesLabel = _loading
         ? '...'
         : '$_capturedEvidenceCount/$_totalEvidenceGoal';
@@ -174,7 +191,7 @@ class _ChallengesScreenState extends State<ChallengesScreen> {
                         _HeroMetric(
                           icon: Icons.shield_outlined,
                           value: protectedLabel,
-                          label: 'Protección',
+                          label: 'Conexión',
                           valueColor: const Color(0xFF47A934),
                         ),
                       ],
@@ -200,7 +217,9 @@ class _ChallengesScreenState extends State<ChallengesScreen> {
                   ),
                   const Spacer(),
                   Text(
-                    '${_challenges.length} activos',
+                    _showingCached
+                        ? '${_challenges.length} en caché'
+                        : '${_challenges.length} activos',
                     style: const TextStyle(
                       color: Color(0xFF0397B0),
                       fontWeight: FontWeight.w600,

@@ -10,6 +10,7 @@ type StoreSubmissionPhotoParams = {
   submissionId: number;
   itemCode: string;
   userId: number;
+  clientRequestId?: string;
 };
 
 @Injectable()
@@ -52,7 +53,12 @@ export class EvidenceStorageService {
     const extension =
       extname(params.file.originalname || '').toLowerCase() || '.jpg';
     const safeItemCode = params.itemCode.replace(/[^a-zA-Z0-9_-]/g, '_');
-    return `submissions/${params.submissionId}/u${params.userId}_${safeItemCode}_${Date.now()}_${uuidv4()}${extension}`;
+    const normalizedRequestId = params.clientRequestId?.trim();
+    const stableSuffix =
+      normalizedRequestId && normalizedRequestId.length > 0
+        ? normalizedRequestId.replace(/[^a-zA-Z0-9_-]/g, '_')
+        : `${Date.now()}_${uuidv4()}`;
+    return `submissions/${params.submissionId}/u${params.userId}_${safeItemCode}_${stableSuffix}${extension}`;
   }
 
   private async storeInSupabase(
@@ -75,7 +81,7 @@ export class EvidenceStorageService {
       .from(bucket)
       .upload(objectName, file.buffer, {
         contentType: file.mimetype || 'image/jpeg',
-        upsert: false,
+        upsert: true,
       });
     if (error) {
       throw new Error(`Supabase upload failed: ${error.message}`);

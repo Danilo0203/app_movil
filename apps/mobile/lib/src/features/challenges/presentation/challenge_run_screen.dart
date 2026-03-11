@@ -1,7 +1,5 @@
 part of '../../../../main.dart';
 
-final Map<int, Map<String, String>> _submissionLocalEvidenceCache = {};
-
 class ChallengeRunScreen extends StatefulWidget {
   const ChallengeRunScreen({
     super.key,
@@ -19,9 +17,8 @@ class ChallengeRunScreen extends StatefulWidget {
 }
 
 class _ChallengeRunScreenState extends State<ChallengeRunScreen> {
+  final OfflineAppController _offline = OfflineAppController.instance;
   SubmissionModel? _submission;
-  final Map<String, File> _captured = {};
-  final Map<String, String> _uploadPaths = {};
   bool _busy = false;
   String? _error;
 
@@ -33,34 +30,15 @@ class _ChallengeRunScreenState extends State<ChallengeRunScreen> {
 
   Future<void> _restoreExistingSubmission() async {
     try {
-      await _ensureSubmission();
+      final submission = await _offline.loadOrCreateSubmission(
+        widget.challenge,
+      );
+      if (!mounted) return;
+      setState(() => _submission = submission);
     } catch (e) {
       if (!mounted) return;
       setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
     }
-  }
-
-  Future<void> _ensureSubmission() async {
-    if (_submission != null) return;
-    final sub = await widget.api.createSubmission(widget.challenge.id);
-    final restoredUploads = <String, String>{
-      for (final evidence in sub.evidences)
-        evidence.itemCode: evidence.photoPath,
-    };
-    final restoredCaptured = <String, File>{};
-    final cachedPaths = _submissionLocalEvidenceCache[sub.id] ?? const {};
-    for (final entry in cachedPaths.entries) {
-      final file = File(entry.value);
-      if (await file.exists()) {
-        restoredCaptured[entry.key] = file;
-      }
-    }
-    if (!mounted) return;
-    setState(() {
-      _submission = sub;
-      _uploadPaths.addAll(restoredUploads);
-      _captured.addAll(restoredCaptured);
-    });
   }
 
   Future<void> _captureAndUpload(ChallengeItem item) async {
@@ -69,29 +47,21 @@ class _ChallengeRunScreenState extends State<ChallengeRunScreen> {
       _error = null;
     });
     try {
-      await _ensureSubmission();
-      if (!mounted) return;
       final file = await Navigator.of(context).push<File>(
         MaterialPageRoute(
           builder: (_) => CameraCaptureScreen(itemLabel: item.label),
         ),
       );
       if (file == null) return;
-      final res = await widget.api.uploadEvidence(
-        submissionId: _submission!.id,
-        itemCode: item.code,
-        file: file,
+      final submission = await _offline.captureEvidence(
+        challenge: widget.challenge,
+        item: item,
+        sourceFile: file,
       );
-      final photoPath = res['photoPath']?.toString() ?? file.path;
-      _submissionLocalEvidenceCache[_submission!.id] ??= {};
-      _submissionLocalEvidenceCache[_submission!.id]![item.code] = file.path;
-      if (mounted) {
-        setState(() {
-          _captured[item.code] = file;
-          _uploadPaths[item.code] = photoPath;
-        });
-      }
+      if (!mounted) return;
+      setState(() => _submission = submission);
     } catch (e) {
+      if (!mounted) return;
       setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -104,7 +74,7 @@ class _ChallengeRunScreenState extends State<ChallengeRunScreen> {
       builder: (context) => AlertDialog(
         title: const Text('Completar reto'),
         content: const Text(
-          'Se validará el checklist y se generará un PDF con las evidencias capturadas.',
+          'Se guardará localmente y se sincronizará al reconectar si no hay internet.',
         ),
         actions: [
           TextButton(
@@ -125,13 +95,18 @@ class _ChallengeRunScreenState extends State<ChallengeRunScreen> {
       _error = null;
     });
     try {
-      await _ensureSubmission();
-      await widget.api.completeSubmission(_submission!.id);
+      final submission = await _offline.completeSubmission(widget.challenge);
+      _submission = submission;
       final bytes = await PdfReportService.buildReport(
         challenge: widget.challenge,
         userName: widget.session.userName,
         userEmail: widget.session.userEmail,
-        evidenceFiles: _captured,
+        evidenceFiles: {
+          for (final evidence in submission.evidences)
+            if (evidence.localFilePath != null &&
+                evidence.localFilePath!.isNotEmpty)
+              evidence.itemCode: File(evidence.localFilePath!),
+        },
       );
       final dir = await getTemporaryDirectory();
       final fileName =
@@ -140,6 +115,7 @@ class _ChallengeRunScreenState extends State<ChallengeRunScreen> {
       await file.writeAsBytes(bytes, flush: true);
 
       if (!mounted) return;
+      setState(() {});
       await Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) =>
@@ -147,6 +123,7 @@ class _ChallengeRunScreenState extends State<ChallengeRunScreen> {
         ),
       );
     } catch (e) {
+      if (!mounted) return;
       setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -155,12 +132,19 @@ class _ChallengeRunScreenState extends State<ChallengeRunScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final submission = _submission;
+    final evidenceByCode = <String, SubmissionEvidenceModel>{
+      for (final evidence
+          in submission?.evidences ?? const <SubmissionEvidenceModel>[])
+        evidence.itemCode: evidence,
+    };
     final completedCount = widget.challenge.items
-        .where((i) => _uploadPaths.containsKey(i.code))
+        .where((i) => evidenceByCode.containsKey(i.code))
         .length;
     final isComplete =
         completedCount == widget.challenge.items.length &&
         widget.challenge.items.isNotEmpty;
+
     return Scaffold(
       appBar: AppBar(title: Text(widget.challenge.title)),
       body: ListView(
@@ -227,9 +211,11 @@ class _ChallengeRunScreenState extends State<ChallengeRunScreen> {
                             '$completedCount/${widget.challenge.items.length}',
                       ),
                       SummaryChip(
-                        icon: Icons.picture_as_pdf_outlined,
-                        label: 'PDF',
-                        value: isComplete ? 'Listo' : 'Pendiente',
+                        icon: Icons.sync_outlined,
+                        label: 'Estado',
+                        value: submission == null
+                            ? 'Preparando'
+                            : submission.syncStatus.label,
                       ),
                     ],
                   ),
@@ -241,11 +227,26 @@ class _ChallengeRunScreenState extends State<ChallengeRunScreen> {
           ...widget.challenge.items.asMap().entries.map((entry) {
             final item = entry.value;
             final itemIndex = entry.key;
-            final file = _captured[item.code];
-            final uploadedPath = _uploadPaths[item.code];
-            final isUploaded = uploadedPath != null;
+            final evidence = evidenceByCode[item.code];
+            final localPath = evidence?.localFilePath;
+            final uploadedPath = evidence?.photoPath;
+            final hasLocalPreview =
+                localPath != null &&
+                localPath.isNotEmpty &&
+                File(localPath).existsSync();
             final hasRemotePreview =
-                uploadedPath != null && uploadedPath.startsWith('http');
+                uploadedPath != null &&
+                uploadedPath.isNotEmpty &&
+                uploadedPath.startsWith('http');
+            final isMissingLocalFile =
+                localPath != null && localPath.isNotEmpty && !hasLocalPreview;
+            final status = evidence?.syncStatus ?? SyncStatus.pending;
+            final fileLabel = switch ((hasLocalPreview, hasRemotePreview)) {
+              (true, _) => p.basename(localPath!),
+              (false, true) => p.basename(uploadedPath!),
+              _ when isMissingLocalFile => 'Archivo local no disponible',
+              _ => 'Pendiente',
+            };
             return FadeSlideIn(
               delay: Duration(milliseconds: 90 + (itemIndex * 35)),
               child: Padding(
@@ -255,14 +256,25 @@ class _ChallengeRunScreenState extends State<ChallengeRunScreen> {
                     padding: const EdgeInsets.all(10),
                     child: Row(
                       children: [
-                        if (file != null)
+                        if (hasLocalPreview)
                           ClipRRect(
                             borderRadius: BorderRadius.circular(12),
                             child: Image.file(
-                              file,
+                              File(localPath),
                               width: 56,
                               height: 56,
                               fit: BoxFit.cover,
+                              errorBuilder: (_, _, _) => Container(
+                                width: 56,
+                                height: 56,
+                                decoration: BoxDecoration(
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.surfaceContainerHighest,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: const Icon(Icons.broken_image_outlined),
+                              ),
                             ),
                           )
                         else if (hasRemotePreview)
@@ -309,13 +321,24 @@ class _ChallengeRunScreenState extends State<ChallengeRunScreen> {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                file != null
-                                    ? p.basename(file.path)
-                                    : isUploaded
-                                    ? p.basename(uploadedPath)
-                                    : 'Pendiente',
+                                fileLabel,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                evidence?.syncStatus.label ?? 'Pendiente',
+                                style: TextStyle(
+                                  color: switch (status) {
+                                    SyncStatus.synced => Colors.green,
+                                    SyncStatus.error => Colors.red,
+                                    SyncStatus.syncing => Colors.blue,
+                                    SyncStatus.pending => const Color(
+                                      0xFFAD6A00,
+                                    ),
+                                  },
+                                  fontWeight: FontWeight.w700,
+                                ),
                               ),
                             ],
                           ),
@@ -325,14 +348,18 @@ class _ChallengeRunScreenState extends State<ChallengeRunScreen> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Icon(
-                              file != null
-                                  ? Icons.check_circle
-                                  : isUploaded
-                                  ? Icons.check_circle
-                                  : Icons.radio_button_unchecked,
-                              color: (file != null || isUploaded)
-                                  ? Colors.green
-                                  : null,
+                              switch (status) {
+                                SyncStatus.synced => Icons.check_circle,
+                                SyncStatus.error => Icons.error_outline,
+                                SyncStatus.syncing => Icons.sync,
+                                SyncStatus.pending => Icons.schedule,
+                              },
+                              color: switch (status) {
+                                SyncStatus.synced => Colors.green,
+                                SyncStatus.error => Colors.red,
+                                SyncStatus.syncing => Colors.blue,
+                                SyncStatus.pending => const Color(0xFFAD6A00),
+                              },
                             ),
                             const SizedBox(height: 6),
                             IconButton.filledTonal(
@@ -374,7 +401,13 @@ class _ChallengeRunScreenState extends State<ChallengeRunScreen> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.picture_as_pdf),
-              label: Text(_busy ? 'Procesando...' : 'Completar y generar PDF'),
+              label: Text(
+                _busy
+                    ? 'Procesando...'
+                    : _offline.isOnline
+                    ? 'Completar y generar PDF'
+                    : 'Guardar offline y generar PDF',
+              ),
             ),
           ),
         ],

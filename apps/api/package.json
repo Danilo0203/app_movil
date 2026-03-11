@@ -8,10 +8,12 @@
   "scripts": {
     "build": "nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
+    "db:ensure-legacy-user-profile": "node scripts/ensure-legacy-user-profile.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
     "start": "nest start",
+    "prestart:dev": "npm run db:ensure-legacy-user-profile",
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
     "prestart:prod": "prisma migrate deploy",

@@ -10,10 +10,13 @@ class ApiClient {
   Uri _uri(String path) =>
       Uri.parse('${baseUrl.replaceAll(RegExp(r'/+$'), '')}$path');
 
-  Map<String, String> _headers({bool auth = false}) => {
-    'Content-Type': 'application/json',
-    if (auth && token != null) 'Authorization': 'Bearer $token',
-  };
+  Map<String, String> _headers({bool auth = false, String? clientRequestId}) =>
+      {
+        'Content-Type': 'application/json',
+        if (auth && token != null) 'Authorization': 'Bearer $token',
+        if (clientRequestId != null && clientRequestId.isNotEmpty)
+          'X-Client-Request-Id': clientRequestId,
+      };
 
   Future<Map<String, dynamic>> register({
     required String name,
@@ -61,11 +64,19 @@ class ApiClient {
     if (res.statusCode >= 400) throw Exception(_readError(res));
   }
 
-  Future<SubmissionModel> createSubmission(int challengeId) async {
+  Future<void> healthCheck() async {
+    final res = await http.get(_uri('/health')).timeout(_requestTimeout);
+    if (res.statusCode >= 400) throw Exception(_readError(res));
+  }
+
+  Future<SubmissionModel> createSubmission(
+    int challengeId, {
+    String? clientRequestId,
+  }) async {
     final res = await http
         .post(
           _uri('/submissions'),
-          headers: _headers(auth: true),
+          headers: _headers(auth: true, clientRequestId: clientRequestId),
           body: jsonEncode({'challengeId': challengeId}),
         )
         .timeout(_requestTimeout);
@@ -76,6 +87,7 @@ class ApiClient {
     required int submissionId,
     required String itemCode,
     required File file,
+    String? clientRequestId,
   }) async {
     final req = http.MultipartRequest(
       'POST',
@@ -83,6 +95,9 @@ class ApiClient {
     );
     if (token != null) {
       req.headers['Authorization'] = 'Bearer $token';
+    }
+    if (clientRequestId != null && clientRequestId.isNotEmpty) {
+      req.headers['X-Client-Request-Id'] = clientRequestId;
     }
     req.fields['itemCode'] = itemCode;
     req.files.add(await http.MultipartFile.fromPath('file', file.path));
@@ -94,14 +109,17 @@ class ApiClient {
     return jsonDecode(body) as Map<String, dynamic>;
   }
 
-  Future<Map<String, dynamic>> completeSubmission(int submissionId) async {
+  Future<SubmissionModel> completeSubmission(
+    int submissionId, {
+    String? clientRequestId,
+  }) async {
     final res = await http
         .post(
           _uri('/submissions/$submissionId/complete'),
-          headers: _headers(auth: true),
+          headers: _headers(auth: true, clientRequestId: clientRequestId),
         )
         .timeout(_requestTimeout);
-    return _decodeObject(res);
+    return _submissionFromJson(_decodeObject(res));
   }
 
   Future<List<SubmissionModel>> mySubmissions() async {
@@ -131,6 +149,7 @@ class ApiClient {
     String? email,
     String? phone,
     String? address,
+    String? clientRequestId,
   }) async {
     final payload = <String, dynamic>{};
     if (name != null) payload['name'] = name;
@@ -141,7 +160,7 @@ class ApiClient {
     final res = await http
         .patch(
           _uri('/users/me'),
-          headers: _headers(auth: true),
+          headers: _headers(auth: true, clientRequestId: clientRequestId),
           body: jsonEncode(payload),
         )
         .timeout(_requestTimeout);
@@ -165,10 +184,16 @@ class ApiClient {
     if (res.statusCode >= 400) throw Exception(_readError(res));
   }
 
-  Future<UserProfileModel> uploadMyAvatar(File file) async {
+  Future<UserProfileModel> uploadMyAvatar(
+    File file, {
+    String? clientRequestId,
+  }) async {
     final req = http.MultipartRequest('POST', _uri('/users/me/avatar'));
     if (token != null) {
       req.headers['Authorization'] = 'Bearer $token';
+    }
+    if (clientRequestId != null && clientRequestId.isNotEmpty) {
+      req.headers['X-Client-Request-Id'] = clientRequestId;
     }
     req.files.add(await http.MultipartFile.fromPath('file', file.path));
     final streamed = await req.send().timeout(_requestTimeout);

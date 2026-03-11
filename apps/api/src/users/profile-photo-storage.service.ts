@@ -12,8 +12,13 @@ export class ProfilePhotoStorageService {
   async storeUserAvatar(params: {
     file: Express.Multer.File;
     userId: number;
+    clientRequestId?: string;
   }): Promise<string> {
-    const objectName = this.buildObjectName(params.file, params.userId);
+    const objectName = this.buildObjectName(
+      params.file,
+      params.userId,
+      params.clientRequestId,
+    );
 
     if (this.hasSupabaseConfig()) {
       return this.storeInSupabase(params.file, objectName);
@@ -29,9 +34,18 @@ export class ProfilePhotoStorageService {
     );
   }
 
-  private buildObjectName(file: Express.Multer.File, userId: number): string {
+  private buildObjectName(
+    file: Express.Multer.File,
+    userId: number,
+    clientRequestId?: string,
+  ): string {
     const extension = extname(file.originalname || '').toLowerCase() || '.jpg';
-    return `avatars/u${userId}_${Date.now()}_${uuidv4()}${extension}`;
+    const normalizedRequestId = clientRequestId?.trim();
+    const stableSuffix =
+      normalizedRequestId && normalizedRequestId.length > 0
+        ? normalizedRequestId.replace(/[^a-zA-Z0-9_-]/g, '_')
+        : `${Date.now()}_${uuidv4()}`;
+    return `avatars/u${userId}_${stableSuffix}${extension}`;
   }
 
   private async storeInSupabase(
@@ -54,7 +68,7 @@ export class ProfilePhotoStorageService {
       .from(bucket)
       .upload(objectName, file.buffer, {
         contentType: file.mimetype || 'image/jpeg',
-        upsert: false,
+        upsert: true,
       });
     if (error) {
       throw new Error(

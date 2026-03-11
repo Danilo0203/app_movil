@@ -15,6 +15,7 @@ class ProfileEditScreen extends StatefulWidget {
 }
 
 class _ProfileEditScreenState extends State<ProfileEditScreen> {
+  final OfflineAppController _offline = OfflineAppController.instance;
   final _formKey = GlobalKey<FormState>();
 
   late final TextEditingController _nameCtrl;
@@ -32,6 +33,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
   bool _showConfirmPassword = false;
 
   String? _avatarUrl;
+  String? _localAvatarPath;
 
   @override
   void initState() {
@@ -41,6 +43,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     _phoneCtrl = TextEditingController(text: widget.initial.phone ?? '');
     _addressCtrl = TextEditingController(text: widget.initial.address ?? '');
     _avatarUrl = widget.initial.avatarUrl;
+    _localAvatarPath = widget.initial.localAvatarPath;
   }
 
   @override
@@ -67,11 +70,20 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
 
     setState(() => _uploadingAvatar = true);
     try {
-      final updated = await widget.api.uploadMyAvatar(file);
+      final updated = await _offline.saveAvatarOffline(file);
       if (!mounted) return;
-      setState(() => _avatarUrl = updated.avatarUrl);
+      setState(() {
+        _avatarUrl = updated.avatarUrl;
+        _localAvatarPath = updated.localAvatarPath;
+      });
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Foto de perfil actualizada.')),
+        SnackBar(
+          content: Text(
+            _offline.isOnline
+                ? 'Foto de perfil guardada. Se sincronizará enseguida.'
+                : 'Foto de perfil guardada offline.',
+          ),
+        ),
       );
     } catch (e) {
       if (!mounted) return;
@@ -93,7 +105,15 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
 
     setState(() => _saving = true);
     try {
-      final updated = await widget.api.updateMyProfile(
+      if (shouldChangePassword && !_offline.isOnline) {
+        throw Exception('El cambio de contraseña requiere conexión.');
+      }
+
+      final updated = await _offline.saveProfileOffline(
+        base: widget.initial.copyWith(
+          avatarUrl: _avatarUrl,
+          localAvatarPath: _localAvatarPath,
+        ),
         name: _nameCtrl.text.trim(),
         email: _emailCtrl.text.trim(),
         phone: _phoneCtrl.text.trim(),
@@ -114,14 +134,13 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
         phone: updated.phone,
         address: updated.address,
         avatarUrl: _avatarUrl ?? updated.avatarUrl,
+        localAvatarPath: _localAvatarPath,
+        syncStatus: updated.syncStatus,
         createdAt: updated.createdAt,
         updatedAt: updated.updatedAt,
       );
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Cambios guardados correctamente.')),
-      );
       Navigator.of(context).pop(result);
     } catch (e) {
       if (!mounted) return;
@@ -136,6 +155,10 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
   @override
   Widget build(BuildContext context) {
     final normalizedAvatarUrl = _avatarUrl?.trim();
+    final normalizedLocalAvatarPath = _localAvatarPath?.trim();
+    final hasLocalAvatar =
+        normalizedLocalAvatarPath != null &&
+        normalizedLocalAvatarPath.isNotEmpty;
     final hasRemoteAvatar =
         normalizedAvatarUrl != null && normalizedAvatarUrl.startsWith('http');
 
@@ -206,7 +229,16 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                                           end: Alignment.bottomRight,
                                         ),
                                         borderRadius: BorderRadius.circular(24),
-                                        image: hasRemoteAvatar
+                                        image: hasLocalAvatar
+                                            ? DecorationImage(
+                                                image: FileImage(
+                                                  File(
+                                                    normalizedLocalAvatarPath,
+                                                  ),
+                                                ),
+                                                fit: BoxFit.cover,
+                                              )
+                                            : hasRemoteAvatar
                                             ? DecorationImage(
                                                 image: NetworkImage(
                                                   normalizedAvatarUrl,
@@ -280,6 +312,12 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                                   ?.copyWith(fontWeight: FontWeight.w800),
                             ),
                             const SizedBox(height: 16),
+                            if (!_offline.isOnline)
+                              const Text(
+                                'El cambio de contraseña solo está disponible con conexión.',
+                                style: TextStyle(color: Color(0xFFAD6A00)),
+                              ),
+                            if (!_offline.isOnline) const SizedBox(height: 16),
                             const _FieldLabel('Nombre completo'),
                             const SizedBox(height: 8),
                             TextFormField(

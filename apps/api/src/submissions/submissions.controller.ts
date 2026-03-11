@@ -3,6 +3,7 @@ import {
   Body,
   Controller,
   Get,
+  Headers,
   HttpCode,
   HttpStatus,
   Param,
@@ -17,6 +18,7 @@ import { memoryStorage } from 'multer';
 import { extname } from 'path';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { IdempotencyService } from '../idempotency/idempotency.service';
 import { CreateSubmissionDto } from './dto/create-submission.dto';
 import { EvidenceStorageService } from './evidence-storage.service';
 import { UploadSubmissionPhotoDto } from './dto/upload-submission-photo.dto';
@@ -28,6 +30,7 @@ export class SubmissionsController {
   constructor(
     private readonly submissionsService: SubmissionsService,
     private readonly evidenceStorageService: EvidenceStorageService,
+    private readonly idempotencyService: IdempotencyService,
   ) {}
 
   @Post()
@@ -35,10 +38,20 @@ export class SubmissionsController {
   create(
     @CurrentUser() user: { id: number },
     @Body() dto: CreateSubmissionDto,
+    @Headers('x-client-request-id') clientRequestId?: string,
   ) {
-    return this.submissionsService
-      .create(user.id, dto.challengeId)
-      .then((submission) => this.serializeSubmission(submission));
+    return this.withIdempotency({
+      clientRequestId,
+      operation: 'submissions.create',
+      userId: user.id,
+      resolve: async () => {
+        const submission = await this.submissionsService.create(
+          user.id,
+          dto.challengeId,
+        );
+        return this.serializeSubmission(submission);
+      },
+    });
   }
 
   @Get('my')
@@ -95,45 +108,89 @@ export class SubmissionsController {
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser() user: { id: number },
     @Body() dto: UploadSubmissionPhotoDto,
+    @Headers('x-client-request-id') clientRequestId?: string,
     @UploadedFile() file?: Express.Multer.File,
   ) {
     if (!file) {
       throw new BadRequestException('File is required');
     }
 
-    const photoPath = await this.evidenceStorageService.storeSubmissionPhoto({
-      file,
-      submissionId: id,
-      itemCode: dto.itemCode,
+    return this.withIdempotency({
+      clientRequestId,
+      operation: `submissions.uploadPhoto.${id}.${dto.itemCode}`,
       userId: user.id,
-    });
+      resolve: async () => {
+        const photoPath =
+          await this.evidenceStorageService.storeSubmissionPhoto({
+            file,
+            submissionId: id,
+            itemCode: dto.itemCode,
+            userId: user.id,
+            clientRequestId,
+          });
 
-    return this.submissionsService.addEvidence({
-      submissionId: id,
-      userId: user.id,
-      itemCode: dto.itemCode,
-      photoPath,
-    }).then((evidence) => ({
-      ...evidence,
-      photoPath: this.evidenceStorageService.resolvePhotoPath(
-        evidence.photoPath,
-      ),
-    }));
+        const evidence = await this.submissionsService.addEvidence({
+          submissionId: id,
+          userId: user.id,
+          itemCode: dto.itemCode,
+          photoPath,
+        });
+
+        return {
+          ...evidence,
+          photoPath: this.evidenceStorageService.resolvePhotoPath(
+            evidence.photoPath,
+          ),
+        };
+      },
+    });
   }
 
   @Post(':id/complete')
   complete(
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser() user: { id: number },
+    @Headers('x-client-request-id') clientRequestId?: string,
   ) {
-    return this.submissionsService
-      .complete(id, user.id)
-      .then((submission) => this.serializeSubmission(submission));
+    return this.withIdempotency({
+      clientRequestId,
+      operation: `submissions.complete.${id}`,
+      userId: user.id,
+      resolve: async () => {
+        const submission = await this.submissionsService.complete(id, user.id);
+        return this.serializeSubmission(submission);
+      },
+    });
   }
 
-  private serializeSubmission<T extends { evidences: Array<{ photoPath: string }> }>(
-    submission: T,
-  ): T {
+  private async withIdempotency<T>(params: {
+    clientRequestId?: string;
+    operation: string;
+    userId: number;
+    resolve: () => Promise<T>;
+  }): Promise<T> {
+    const existing = await this.idempotencyService.findResponse<T>({
+      clientRequestId: params.clientRequestId,
+      userId: params.userId,
+      operation: params.operation,
+    });
+    if (existing != null) {
+      return existing;
+    }
+
+    const response = await params.resolve();
+    await this.idempotencyService.saveResponse({
+      clientRequestId: params.clientRequestId,
+      userId: params.userId,
+      operation: params.operation,
+      response,
+    });
+    return response;
+  }
+
+  private serializeSubmission<
+    T extends { evidences: Array<{ photoPath: string }> },
+  >(submission: T): T {
     return {
       ...submission,
       evidences: submission.evidences.map((evidence) => ({

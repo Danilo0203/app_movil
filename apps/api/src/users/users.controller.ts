@@ -3,6 +3,7 @@ import {
   Body,
   Controller,
   Get,
+  Headers,
   HttpCode,
   HttpStatus,
   Patch,
@@ -16,6 +17,7 @@ import { memoryStorage } from 'multer';
 import { extname } from 'path';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { IdempotencyService } from '../idempotency/idempotency.service';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ProfilePhotoStorageService } from './profile-photo-storage.service';
@@ -26,6 +28,7 @@ export class UsersController {
   constructor(
     private readonly usersService: UsersService,
     private readonly profilePhotoStorageService: ProfilePhotoStorageService,
+    private readonly idempotencyService: IdempotencyService,
   ) {}
 
   @Get()
@@ -44,8 +47,14 @@ export class UsersController {
   updateProfile(
     @CurrentUser() user: { id: number },
     @Body() dto: UpdateProfileDto,
+    @Headers('x-client-request-id') clientRequestId?: string,
   ) {
-    return this.usersService.updateProfile(user.id, dto);
+    return this.withIdempotency({
+      clientRequestId,
+      operation: 'users.updateProfile',
+      userId: user.id,
+      resolve: () => this.usersService.updateProfile(user.id, dto),
+    });
   }
 
   @Post('me/change-password')
@@ -92,17 +101,53 @@ export class UsersController {
   )
   async uploadAvatar(
     @CurrentUser() user: { id: number },
+    @Headers('x-client-request-id') clientRequestId?: string,
     @UploadedFile() file?: Express.Multer.File,
   ) {
     if (!file) {
       throw new BadRequestException('File is required');
     }
 
-    const avatarUrl = await this.profilePhotoStorageService.storeUserAvatar({
-      file,
+    return this.withIdempotency({
+      clientRequestId,
+      operation: 'users.uploadAvatar',
       userId: user.id,
-    });
+      resolve: async () => {
+        const avatarUrl = await this.profilePhotoStorageService.storeUserAvatar(
+          {
+            file,
+            userId: user.id,
+            clientRequestId,
+          },
+        );
 
-    return this.usersService.updateAvatar(user.id, avatarUrl);
+        return this.usersService.updateAvatar(user.id, avatarUrl);
+      },
+    });
+  }
+
+  private async withIdempotency<T>(params: {
+    clientRequestId?: string;
+    operation: string;
+    userId: number;
+    resolve: () => Promise<T>;
+  }): Promise<T> {
+    const existing = await this.idempotencyService.findResponse<T>({
+      clientRequestId: params.clientRequestId,
+      userId: params.userId,
+      operation: params.operation,
+    });
+    if (existing != null) {
+      return existing;
+    }
+
+    const response = await params.resolve();
+    await this.idempotencyService.saveResponse({
+      clientRequestId: params.clientRequestId,
+      userId: params.userId,
+      operation: params.operation,
+      response,
+    });
+    return response;
   }
 }

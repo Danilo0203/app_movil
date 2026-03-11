@@ -14,9 +14,11 @@ class RankingScreen extends StatefulWidget {
 }
 
 class _RankingScreenState extends State<RankingScreen> {
+  final OfflineAppController _offline = OfflineAppController.instance;
   bool _loading = true;
   String? _error;
   List<Map<String, dynamic>> _rows = const [];
+  DateTime? _cachedAt;
 
   @override
   void initState() {
@@ -30,9 +32,13 @@ class _RankingScreenState extends State<RankingScreen> {
       _error = null;
     });
     try {
-      final rows = await widget.api.ranking();
+      final result = await _offline.loadRanking();
+      final rows = result.items;
       if (mounted) {
-        setState(() => _rows = rows);
+        setState(() {
+          _rows = rows;
+          _cachedAt = result.cachedAt;
+        });
       }
     } catch (e) {
       if (mounted) {
@@ -84,6 +90,13 @@ class _RankingScreenState extends State<RankingScreen> {
                     'Compite por el primer lugar completando retos.',
                     style: TextStyle(color: Color(0xFF5D7287)),
                   ),
+                  if (_cachedAt != null) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      'Ultima actualización: ${DateFormat('dd/MM HH:mm').format(_cachedAt!)}',
+                      style: const TextStyle(color: Color(0xFF5D7287)),
+                    ),
+                  ],
                   const SizedBox(height: 12),
                   Wrap(
                     spacing: 8,

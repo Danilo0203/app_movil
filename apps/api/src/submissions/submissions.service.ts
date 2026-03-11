@@ -93,6 +93,17 @@ export class SubmissionsService {
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === 'P2002'
       ) {
+        const existingEvidence = await this.prisma.submissionEvidence.findFirst(
+          {
+            where: {
+              submissionId: params.submissionId,
+              itemCode: params.itemCode,
+            },
+          },
+        );
+        if (existingEvidence) {
+          return existingEvidence;
+        }
         throw new ConflictException(
           'Evidence for this itemCode already exists',
         );
